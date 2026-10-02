@@ -35,7 +35,7 @@ axiosInstance.interceptors.request.use(
 
 /**
  * Response interceptor:
- * If an authenticated request encounters a 401, force-refresh the Firebase ID Token
+ * If an authenticated request encounters a 401 or 403, force-refresh the Firebase ID Token
  * via auth.currentUser.getIdToken(true) to ensure custom claim updates or refreshed tokens
  * are seamlessly retried.
  */
@@ -45,7 +45,7 @@ axiosInstance.interceptors.response.use(
     const originalRequest = error.config;
     if (
       error.response &&
-      error.response.status === 401 &&
+      (error.response.status === 401 || error.response.status === 403) &&
       !originalRequest._retry &&
       auth.currentUser
     ) {
@@ -55,7 +55,7 @@ axiosInstance.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return axiosInstance(originalRequest);
       } catch (refreshErr) {
-        console.error("Failed to refresh Firebase ID token on 401:", refreshErr);
+        console.error("Failed to refresh Firebase ID token on 401/403:", refreshErr);
       }
     }
     return Promise.reject(error);

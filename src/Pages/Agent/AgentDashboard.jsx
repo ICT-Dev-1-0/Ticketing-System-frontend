@@ -515,7 +515,14 @@ const AgentDashboard = () => {
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }) => axios.patch(`/api/tickets/${id}/status`, { status }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      showToast("success", "Status updated successfully");
+    },
+    onError: (err) => {
+      invalidate();
+      showToast("error", err.response?.data?.message || "Failed to update status");
+    },
   });
 
   const assignMutation = useMutation({
@@ -524,7 +531,16 @@ const AgentDashboard = () => {
         assigned_to,
         ...(assignment_note ? { assignment_note } : {}),
       }),
-    onSuccess: () => { invalidate(); setAssignModalTicket(null); },
+    onSuccess: () => {
+      invalidate();
+      setAssignModalTicket(null);
+      showToast("success", "Ticket assigned successfully");
+    },
+    onError: (err) => {
+      invalidate();
+      setAssignModalTicket(null);
+      showToast("error", err.response?.data?.message || "Failed to assign ticket");
+    },
   });
 
   const updateTicketMutation = useMutation({

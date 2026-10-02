@@ -750,6 +750,58 @@ const UserDashboardHistory = () => {
     staleTime: 1000 * 60 * 30,
   });
 
+  // 5b. Assigned Agents lookup (fetches agent details if not present in initial users list)
+  const assignedAgentIds = useMemo(
+    () => [
+      ...new Set(
+        tickets
+          .map((t) => t.assigned_to)
+          .filter((id) => id != null),
+      ),
+    ],
+    [tickets],
+  );
+
+  const { data: assignedAgentsMap = {} } = useQuery({
+    queryKey: ["assignedAgents", assignedAgentIds, users],
+    queryFn: async () => {
+      if (!assignedAgentIds.length) return {};
+      const results = await Promise.all(
+        assignedAgentIds.map(async (id) => {
+          const fromUsers = users.find(
+            (u) => String(u.id) === String(id),
+          );
+          if (fromUsers?.name) return { id, name: fromUsers.name };
+
+          try {
+            const res = await axiosInstance.get(`/api/users/${id}`);
+            const fetched = res.data?.data;
+            return { id, name: fetched?.name || null };
+          } catch {
+            return { id, name: null };
+          }
+        }),
+      );
+      const map = {};
+      results.forEach(({ id, name }) => {
+        if (name) map[id] = name;
+      });
+      return map;
+    },
+    enabled: assignedAgentIds.length > 0,
+    staleTime: 1000 * 60 * 15,
+  });
+
+  const getAgentName = (assignedTo, fallbackName) => {
+    if (!assignedTo) return null;
+    return (
+      assignedAgentsMap[assignedTo] ||
+      users.find((u) => String(u.id) === String(assignedTo))?.name ||
+      fallbackName ||
+      null
+    );
+  };
+
   // 6. Cancel Ticket Mutation
   const { mutate: cancelTicket, variables: activeDeletingId } = useMutation({
     mutationFn: async (ticketId) => {
@@ -778,7 +830,7 @@ const UserDashboardHistory = () => {
       Swal.fire({
         icon: "error",
         title: "Cancellation Failed",
-        text: "Could not cancel ticket.",
+        text: err.response?.data?.message || "Could not cancel ticket.",
         background: "#181825",
         color: "#f1f5f9",
         confirmButtonColor: "#f43f5e",
@@ -884,7 +936,7 @@ const UserDashboardHistory = () => {
         const dept = (ticket.department || "").toLowerCase();
         const topic = (helpTopicsMap[ticket.help_topic_id] || "").toLowerCase();
         const agent = (
-          users.find((u) => u.id === ticket.assigned_to)?.name || ""
+          getAgentName(ticket.assigned_to, ticket.assigned_to_name) || ""
         ).toLowerCase();
 
         return (
@@ -907,6 +959,7 @@ const UserDashboardHistory = () => {
     repliesMap,
     helpTopicsMap,
     users,
+    assignedAgentsMap,
   ]);
 
   const isLoading = isUserLoading || isTicketsLoading;
@@ -1257,7 +1310,7 @@ const UserDashboardHistory = () => {
                               {hasUnread ? "Reply Now" : "View & Reply"}
                             </Link>
 
-                            {ticket.status?.toLowerCase() === "pending" && (
+                            {ticket.status?.toLowerCase() === "pending" && !ticket.assigned_to && (
                               <button
                                 onClick={() =>
                                   handleCancelClick(
@@ -1318,11 +1371,12 @@ const UserDashboardHistory = () => {
                                 <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
                                 <span className="text-zinc-400">Agent:</span>
                                 <strong className="font-medium text-zinc-200">
-                                  {users.find(
-                                    (u) => u.id === ticket.assigned_to,
-                                  )?.name ||
+                                  {getAgentName(
+                                    ticket.assigned_to,
+                                    ticket.assigned_to_name,
+                                  ) ||
                                     ticket.assigned_to_name ||
-                                    `Agent #${ticket.assigned_to}`}
+                                    `#${ticket.assigned_to}`}
                                 </strong>
                               </span>
                             </>

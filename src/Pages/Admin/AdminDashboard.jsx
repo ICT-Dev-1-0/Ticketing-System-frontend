@@ -554,13 +554,12 @@ const AssignModal = ({ users = [], isLoading, ticket, onSelect, onClose }) => {
           {/* Unassign row */}
           <button
             onClick={() => stageUser(null)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors mb-0.5 ${
-              pendingUserId === null
-                ? "bg-violet-500/15 border border-violet-500/25"
-                : !ticket.assigned_to
-                  ? "bg-white/[0.06]"
-                  : "hover:bg-white/[0.04]"
-            }`}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors mb-0.5 ${pendingUserId === null
+              ? "bg-violet-500/15 border border-violet-500/25"
+              : !ticket.assigned_to
+                ? "bg-white/[0.06]"
+                : "hover:bg-white/[0.04]"
+              }`}
           >
             <span className="w-8 h-8 rounded-full bg-white/[0.07] border border-white/[0.1] flex items-center justify-center text-[13px] text-white/30 shrink-0">
               —
@@ -575,18 +574,18 @@ const AssignModal = ({ users = [], isLoading, ticket, onSelect, onClose }) => {
             </div>
             {(pendingUserId === null ||
               (!ticket.assigned_to && pendingUserId === undefined)) && (
-              <svg
-                className="ml-auto text-violet-400 shrink-0"
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            )}
+                <svg
+                  className="ml-auto text-violet-400 shrink-0"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
           </button>
 
           <div className="mx-1 my-1.5 border-t border-white/[0.05]" />
@@ -615,20 +614,19 @@ const AssignModal = ({ users = [], isLoading, ticket, onSelect, onClose }) => {
                   : u.role === "agent"
                     ? { bg: "rgba(96,165,250,0.2)", text: "#93c5fd" }
                     : {
-                        bg: "rgba(255,255,255,0.08)",
-                        text: "rgba(255,255,255,0.35)",
-                      };
+                      bg: "rgba(255,255,255,0.08)",
+                      text: "rgba(255,255,255,0.35)",
+                    };
               return (
                 <button
                   key={u.id}
                   onClick={() => stageUser(u.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
-                    isStaged
-                      ? "bg-violet-500/20 border border-violet-500/35"
-                      : isCurrentlyAssigned
-                        ? "bg-violet-500/10 border border-violet-500/20"
-                        : "hover:bg-white/[0.04] border border-transparent"
-                  }`}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${isStaged
+                    ? "bg-violet-500/20 border border-violet-500/35"
+                    : isCurrentlyAssigned
+                      ? "bg-violet-500/10 border border-violet-500/20"
+                      : "hover:bg-white/[0.04] border border-transparent"
+                    }`}
                 >
                   <span
                     className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
@@ -824,6 +822,14 @@ const AdminDashboard = () => {
     },
   });
 
+  const { data: deptData } = useQuery({
+    queryKey: ["departments"],
+    queryFn: async () => {
+      const res = await axios.get("/api/departments");
+      return res.data?.data ?? res.data ?? [];
+    },
+  });
+
   // ── FIX: Array.isArray guards prevent "tickets.filter is not a function"
   //    when ticketsData / usersData is undefined on the first render cycle.
   const tickets = useMemo(
@@ -833,6 +839,10 @@ const AdminDashboard = () => {
   const users = useMemo(
     () => (Array.isArray(usersData) ? usersData : []),
     [usersData],
+  );
+  const departments = useMemo(
+    () => (Array.isArray(deptData) ? deptData : []),
+    [deptData],
   );
 
   // Derived from `tickets` (the safe array above) — never from raw ticketsData
@@ -875,7 +885,14 @@ const AdminDashboard = () => {
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }) =>
       axios.patch(`/api/tickets/${id}/status`, { status }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      showToast("success", "Status updated successfully");
+    },
+    onError: (err) => {
+      invalidate();
+      showToast("error", err.response?.data?.message || "Failed to update status");
+    },
   });
 
   const assignMutation = useMutation({
@@ -887,6 +904,12 @@ const AdminDashboard = () => {
     onSuccess: () => {
       invalidate();
       setAssignModalTicket(null);
+      showToast("success", "Ticket assigned successfully");
+    },
+    onError: (err) => {
+      invalidate();
+      setAssignModalTicket(null);
+      showToast("error", err.response?.data?.message || "Failed to assign ticket");
     },
   });
 
@@ -896,12 +919,24 @@ const AdminDashboard = () => {
     onSuccess: () => {
       invalidate();
       setEditingTicket(null);
+      showToast("success", "Ticket updated successfully");
+    },
+    onError: (err) => {
+      invalidate();
+      showToast("error", err.response?.data?.message || "Failed to update ticket");
     },
   });
 
   const deleteTicketMutation = useMutation({
     mutationFn: (id) => axios.delete(`/api/tickets/${id}`),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      showToast("success", "Ticket deleted successfully");
+    },
+    onError: (err) => {
+      invalidate();
+      showToast("error", err.response?.data?.message || "Failed to delete ticket");
+    },
   });
 
   // ── Handlers ─────────────────────────────────────────────────────────────
@@ -1095,7 +1130,7 @@ const AdminDashboard = () => {
         {/* Header + Filter */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-[15px] font-bold text-white/90">
+            <h2 className="text-[20px] font-bold text-white/90">
               Ticket Management
             </h2>
             <p className="text-[11.5px] text-white/35 mt-0.5">
@@ -1112,11 +1147,10 @@ const AdminDashboard = () => {
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all whitespace-nowrap ${
-                    filterStatus === status
-                      ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
-                      : "text-white/40 hover:text-white/70"
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all whitespace-nowrap ${filterStatus === status
+                    ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
+                    : "text-white/40 hover:text-white/70"
+                    }`}
                 >
                   {FILTER_LABELS[status]}
                   <span
@@ -1146,7 +1180,7 @@ const AdminDashboard = () => {
           </div>
 
           {filteredTickets.length === 0 ? (
-            <div className="py-20 text-center text-white/20 text-[12px]">
+            <div className="py-20 text-center text-white/20 text-[14px]">
               No tickets match the selected filter.
             </div>
           ) : (
@@ -1179,9 +1213,20 @@ const AdminDashboard = () => {
                           <span className="font-mono text-[10px] text-white/25 shrink-0">
                             {ticket.ticket_number}
                           </span>
-                          <span className="text-[10px] text-white/25">·</span>
-                          <span className="text-[10.5px] text-white/30 truncate">
-                            Dept #{ticket.department_id}
+                          <span className="text-[12px] text-white/25">·</span>
+                          <span
+                            className="text-[12px] text-white/30 truncate"
+                            title={
+                              departments.find(
+                                (d) => d.id === ticket.department_id,
+                              )?.department_title ||
+                              `Dept #${ticket.department_id}`
+                            }
+                          >
+                            {departments.find(
+                              (d) => d.id === ticket.department_id,
+                            )?.department_title ||
+                              `Dept #${ticket.department_id}`}
                             {ticket.room ? ` · ${ticket.room}` : ""}
                           </span>
                           {ticket.status === "COMPLETE" &&
@@ -1193,18 +1238,17 @@ const AdminDashboard = () => {
                               const isSatisfied = parsed.type === "Satisfied";
                               return (
                                 <span
-                                  className={`inline-flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.5 rounded border ${
-                                    isSatisfied
-                                      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                                      : "bg-sky-500/15 text-sky-300 border-sky-500/30"
-                                  }`}
+                                  className={`inline-flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.5 rounded border ${isSatisfied
+                                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                    : "bg-sky-500/15 text-sky-300 border-sky-500/30"
+                                    }`}
                                 >
                                   {isSatisfied ? "⭐ Satisfied" : "✅ Done"}
                                 </span>
                               );
                             })()}
                         </div>
-                        <p className="text-[13px] font-medium text-white/85 truncate">
+                        <p className="text-[16px] font-medium text-white/85 truncate">
                           {ticket.subject}
                         </p>
                       </div>
@@ -1404,11 +1448,10 @@ const AdminDashboard = () => {
                                       const isSat = parsed.type === "Satisfied";
                                       return (
                                         <span
-                                          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                                            isSat
-                                              ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                                              : "bg-sky-500/15 text-sky-300 border-sky-500/30"
-                                          }`}
+                                          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${isSat
+                                            ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                            : "bg-sky-500/15 text-sky-300 border-sky-500/30"
+                                            }`}
                                         >
                                           {isSat ? "⭐ Satisfied" : "✅ Done"}
                                         </span>
@@ -1452,6 +1495,17 @@ const AdminDashboard = () => {
                             )}
 
                             <div className="flex flex-wrap gap-4 text-[11.5px] text-white/40">
+                              <span>
+                                <strong className="text-white/60">
+                                  Dept:
+                                </strong>{" "}
+                                {departments.find(
+                                  (d) => d.id === ticket.department_id,
+                                )?.department_title ||
+                                  (ticket.department_id
+                                    ? `Dept #${ticket.department_id}`
+                                    : "N/A")}
+                              </span>
                               <span>
                                 <strong className="text-white/60">
                                   Topic:

@@ -5,8 +5,8 @@ import { axiosInstance } from "../../Hooks/UseAxiosSecure";
 
 // ── API Fetchers ─────────────────────────────────────────────────────────────
 const fetchTickets = async () => {
-  const res = await axiosInstance.get("/api/tickets");
-  return res.data;
+  const res = await axiosInstance.get("/api/tickets?limit=1000");
+  return res.data?.data ?? res.data ?? [];
 };
 
 const fetchDepartments = async () => {
@@ -17,6 +17,11 @@ const fetchDepartments = async () => {
 const fetchUsers = async () => {
   const res = await axiosInstance.get("/api/users");
   return res.data?.data ?? res.data ?? [];
+};
+
+const isTicketResolved = (status) => {
+  const s = String(status || "").trim().toUpperCase();
+  return s === "COMPLETE" || s === "COMPLETED" || s === "RESOLVED" || s === "CLOSED";
 };
 
 // ── Minimal Visual Elements ───────────────────────────────────────────
@@ -72,41 +77,42 @@ export default function AdminDashboardOverView() {
 
   // ── Derived Metrics ────────────────────────────────────────────────────────
   const totalTickets = tickets.length;
-  const resolvedTickets = tickets.filter(
-    (t) => (t.status || "").toLowerCase() === "resolved" || (t.status || "").toLowerCase() === "closed"
-  ).length;
-  const pendingTickets = tickets.filter(
-    (t) => (t.status || "").toLowerCase() === "pending" || (t.status || "").toLowerCase() === "open"
-  );
-  const criticalTickets = tickets.filter(
-    (t) =>
-      ((t.priority || "").toLowerCase() === "critical" || (t.priority || "").toLowerCase() === "high") &&
-      (t.status || "").toLowerCase() !== "resolved"
-  ).length;
+  const resolvedTickets = tickets.filter((t) => isTicketResolved(t.status)).length;
+  const pendingTickets = tickets.filter((t) => !isTicketResolved(t.status));
+  const criticalTickets = tickets.filter((t) => {
+    const p = String(t.priority || "").toUpperCase();
+    return (p === "CRITICAL" || p === "HIGH" || p === "URGENT") && !isTicketResolved(t.status);
+  }).length;
 
   const resolutionRate = totalTickets > 0 ? Math.round((resolvedTickets / totalTickets) * 100) : 0;
 
   // Department Load Aggregations
   const deptMap = departments.map((dept) => {
-    const deptTickets = tickets.filter((t) => t.department_id === dept.id || t.departmentId === dept.id);
-    const openCount = deptTickets.filter((t) => (t.status || "").toLowerCase() !== "resolved").length;
-    const resolvedCount = deptTickets.filter((t) => (t.status || "").toLowerCase() === "resolved").length;
+    const deptTickets = tickets.filter(
+      (t) => String(t.department_id || t.departmentId) === String(dept.id)
+    );
+    const resolvedCount = deptTickets.filter((t) => isTicketResolved(t.status)).length;
+    const openCount = deptTickets.length - resolvedCount;
     const totalDept = deptTickets.length;
     const pct = totalTickets > 0 ? Math.round((totalDept / totalTickets) * 100) : 0;
+    const displayName = dept.department_title || dept.name || dept.department_code || `Dept #${dept.id}`;
 
     return {
       ...dept,
+      name: displayName,
       open: openCount,
       resolved: resolvedCount,
+      total: totalDept,
       pct,
     };
   });
 
   // User Assignment Aggregations
   const userMap = users.map((u) => {
-    const activeCount = tickets.filter(
-      (t) => (t.assigned_to === u.id || t.assignedTo === u.id) && (t.status || "").toLowerCase() !== "resolved"
-    ).length;
+    const activeCount = tickets.filter((t) => {
+      const isAssigned = String(t.assigned_to || t.assignedTo) === String(u.id);
+      return isAssigned && !isTicketResolved(t.status);
+    }).length;
 
     return {
       ...u,
@@ -119,8 +125,8 @@ export default function AdminDashboardOverView() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-white/90">System Overview</h1>
-          <p className="text-xs text-slate-400 mt-1">Real-time telemetry, operational department distribution, and ticket status.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-white/90">System Overview</h1>
+          <p className="text-[14px] text-slate-400 mt-1">Real-time telemetry, operational department distribution, and ticket status.</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <span className="relative flex h-2 w-2">
@@ -189,10 +195,10 @@ export default function AdminDashboardOverView() {
         <div className="lg:col-span-2 rounded-xl border border-white/10 bg-white/[0.02] backdrop-blur-md overflow-hidden">
           <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-white">Department Breakdown</h2>
-              <p className="text-[11px] text-slate-400">Distribution and queue status across registered units</p>
+              <h2 className="text-xl font-semibold text-white">Department Breakdown</h2>
+              <p className="text-[14px] text-slate-400">Distribution and queue status across registered units</p>
             </div>
-            <span className="text-[11px] font-mono text-slate-500">{deptMap.length} Total</span>
+            <span className="text-[12px] font-mono text-slate-500">{deptMap.length} Total</span>
           </div>
 
           <div className="overflow-x-auto">
@@ -206,7 +212,7 @@ export default function AdminDashboardOverView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 text-slate-300">
-                {isLoadingDepts ? (
+                {isLoadingDepts || isLoadingTickets ? (
                   <tr>
                     <td colSpan={4} className="px-5 py-6 text-center text-slate-500">Loading department telemetry...</td>
                   </tr>
@@ -217,7 +223,16 @@ export default function AdminDashboardOverView() {
                 ) : (
                   deptMap.map((dept) => (
                     <tr key={dept.id || dept.name} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="px-5 py-3.5 font-medium text-white">{dept.name}</td>
+                      <td className="px-5 py-3.5 font-medium text-white">
+                        <div className="flex items-center gap-2">
+                          <span>{dept.name}</span>
+                          {dept.department_code && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-slate-400">
+                              {dept.department_code}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-5 py-3.5 font-mono text-amber-400">{dept.open}</td>
                       <td className="px-5 py-3.5 font-mono text-emerald-400">{dept.resolved}</td>
                       <td className="px-5 py-3.5">
